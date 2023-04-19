@@ -1,0 +1,9 @@
+secure_client.out		: 	secure_client.o 
+	g++ -Wall -O2 secure_client.cpp -o secure_client.out 
+			
+secure_client.o		:	secure_client.cpp 
+	g++ -c -O2 -Wall secure_client.cpp
+	
+clean:
+	$(RM) secure_client.out
+	$(RM) secure_client.o

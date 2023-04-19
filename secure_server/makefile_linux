@@ -1,0 +1,9 @@
+secure_server.out		: 	secure_server.o 
+	g++ -std=c++11 secure_server.cpp -o secure_server.out
+			
+secure_server.o		:	secure_server.cpp 
+	g++ -std=c++11 -c -Wall -O2 secure_server.cpp
+
+clean:
+	$(RM) secure_server.out
+	$(RM) secure_server.o
