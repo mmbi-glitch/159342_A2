@@ -50,6 +50,7 @@ using namespace std;
 /////////////////////////////////////////////////////////////////////
 
 void printBuffer(const char *header, char *buffer){
+
 	cout << "------" << header << "------" << endl;
 	for(unsigned int i=0; i < strlen(buffer); i++){
 		if(buffer[i] == '\r'){
