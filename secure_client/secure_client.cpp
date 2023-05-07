@@ -343,6 +343,17 @@ hints.ai_protocol = IPPROTO_TCP;
 //*******************************************************************
 //Get input while user don't type "."
 //*******************************************************************
+
+//todo create an encrypted public key dCA(e,n)
+// client sends "random number" to the server- sent by e(nonce)
+// the server will decrypt
+/*
+ * eCA = RSA public key
+ * nonce = part of Cipher Block Chaining
+ * extract servers public key (e,n) using copy of CA public key
+ * send msg "ACK 226 public key received"
+ * send e(nonce)
+ */
 	printf("\n--------------------------------------------\n");
 	printf("you may now start sending commands to the <<<SERVER>>>\n");
 	printf("\nType here:");
