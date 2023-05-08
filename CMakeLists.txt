@@ -3,6 +3,14 @@ project(159342_A2)
 
 set(CMAKE_CXX_STANDARD 14)
 
-add_executable(159342_A2
-        secure_client/secure_client.cpp
-        secure_server/secure_server.cpp)
+set(BOOST_ROOT "C:/boost_1_82_0")
+
+find_package(Boost 1.82.0 REQUIRED)
+
+add_executable(159342_A2_client secure_client/secure_client.cpp)
+add_executable(159342_A2_server secure_server/secure_server.cpp)
+
+target_link_libraries(159342_A2_client ws2_32)
+target_link_libraries(159342_A2_server ws2_32)
+
+target_include_directories(159342_A2_server PRIVATE {Boost_INCLUDE_DIRS})
