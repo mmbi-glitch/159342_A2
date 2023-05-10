@@ -32,6 +32,7 @@
 #include <cstdio>
 #include <iostream>
 #include <boost/multiprecision/cpp_int.hpp>
+#include "../RsaSystem.h"
 
 #define WSVERS MAKEWORD(2,2) /* Use the MAKEWORD(lowbyte, highbyte) macro declared in Windef.h */
 //The high-order byte specifies the minor version number;
@@ -45,7 +46,7 @@ WSADATA wsadata; //Create a WSADATA object called wsadata.
 #define BUFFER_SIZE 500
 #define RBUFFER_SIZE 256
 
-using namespace std;
+//using namespace std;
 /////////////////////////////////////////////////////////////////////
 
 int recvFromClient(SOCKET cs, char *recv_buffer) {
@@ -65,19 +66,19 @@ int recvFromClient(SOCKET cs, char *recv_buffer) {
     return bytes;
 }
 
-void printBuffer(const char *header, char *buffer) {
-    cout << "------" << header << "------" << endl;
-    for (unsigned int i = 0; i < strlen(buffer); i++) {
-        if (buffer[i] == '\r') {
-            cout << "buffer[" << i << "]=\\r" << endl;
-        } else if (buffer[i] == '\n') {
-            cout << "buffer[" << i << "]=\\n" << endl;
-        } else {
-            cout << "buffer[" << i << "]=" << buffer[i] << endl;
-        }
-    }
-    cout << "---" << endl;
-}
+//void printBuffer(const char *header, char *buffer) {
+//    cout << "------" << header << "------" << endl;
+//    for (unsigned int i = 0; i < strlen(buffer); i++) {
+//        if (buffer[i] == '\r') {
+//            cout << "buffer[" << i << "]=\\r" << endl;
+//        } else if (buffer[i] == '\n') {
+//            cout << "buffer[" << i << "]=\\n" << endl;
+//        } else {
+//            cout << "buffer[" << i << "]=" << buffer[i] << endl;
+//        }
+//    }
+//    cout << "---" << endl;
+//}
 
 /////////////////////////////////////////////////////////////////////
 
@@ -103,6 +104,14 @@ int main(int argc, char *argv[]) {
     // char passwd[80];
 
     //memset(&localaddr,0,sizeof(localaddr));
+
+    mp::cpp_int eCA = 0;
+    mp::cpp_int nCA = 0;
+    mp::cpp_int dCA = 0;
+    mp::cpp_int eS = 0;
+    mp::cpp_int nS = 0;
+    mp::cpp_int dS = 0;
+    mp::cpp_int nonce = 0;
 
 
 #if defined __unix__ || defined __APPLE__
@@ -382,37 +391,95 @@ int main(int argc, char *argv[]) {
         printf("\n--------------------------------------------\n");
         printf("the <<<SERVER>>> is preparing to authenticate.\n\n");
 
-        int eCA = 10000;
-        int nCA = 76902;
-        int dCA = 120202;
-        int eServer = 1341;
-        int nServer = 1342;
+        RsaSystem rsaSystem = RsaSystem();
+
+        rsaSystem.generate_rsa_key(
+                mp::cpp_int("30031358154668964970024739651879804233674499053648014407906912029448529582085290556750146167520693147584309965856211"),
+                mp::cpp_int("38969351324214852693135968847187948456073706339248221339388224298088876897974759000023020729463076507938961352498811")
+                );
+
+        eCA = rsaSystem.get_e();
+        nCA = rsaSystem.get_n();
+        dCA = rsaSystem.get_d();
+
+        // TODO: Make certificate authority keys fixed, no need to send
 
         // 1. Send public certificate authority key.
 
-        sprintf(send_buffer, "PUBLIC_CA_KEY %d %d\r\n", eCA, nCA);
+        sprintf(send_buffer, "PUBLIC_CA_KEY %s %s\r\n", eCA.str().c_str(), nCA.str().c_str());
         bytes = send(ns, send_buffer, (int) strlen(send_buffer), 0);
         printf("Sending packet: --> %s\n", send_buffer);
         if (bytes < 0) break;
 
         bytes = recvFromClient(ns, &receive_buffer[0]);
         if (bytes < 0) break;
-        printf("MSG RECEIVED <--: %s\n", receive_buffer);
+        printf("Received packet <--: %s\n", receive_buffer);
 
         // 2. Send public server key.
 
-        sprintf(send_buffer, "PUBLIC_SERVER_KEY %d %d\r\n", eServer, nServer);
+        rsaSystem.generate_rsa_key(
+
+                mp::cpp_int("26266586019007016389999254537309480797248686480142848929197905654630816944455399311493709135750769055126452334576199"),
+                mp::cpp_int("29616954500013018701532625580017818303077905824488767279157347496048809531732918685449538060210513590769258986568381")
+        );
+
+
+        eS = rsaSystem.get_e();
+        nS = rsaSystem.get_n();
+        dS = rsaSystem.get_d();
+
+        std::cout << std::endl << "actual eS = " << eS << std::endl;
+        std::cout << std::endl << "actual nS = " << nS << std::endl;
+        std::cout << std::endl << "dCA = " << dCA << std::endl;
+        std::cout << std::endl << "nCA = " << nCA << std::endl;
+
+
+        mp::cpp_int eeS = rsaSystem.encrypt(eS, dCA, nCA);
+        mp::cpp_int enS = rsaSystem.encrypt(nS, dCA, nCA);
+
+        std::cout << std::endl << "encrypted eS = " << eeS << std::endl;
+        std::cout << std::endl << "encrypted nS = " << enS << std::endl;
+
+        sprintf(send_buffer, "PUBLIC_SERVER_KEY %s %s\r\n", eeS.str().c_str(), enS.str().c_str());
         bytes = send(ns, send_buffer, (int) strlen(send_buffer), 0);
         printf("Sending packet: --> %s\n", send_buffer);
         if (bytes < 0) break;
 
         bytes = recvFromClient(ns, &receive_buffer[0]);
         if (bytes < 0) break;
-        printf("MSG RECEIVED <--: %s\n", receive_buffer);
+        printf("Received packet <--: %s\n", receive_buffer);
+
+        // 3. Get nonce from client
 
         bytes = recvFromClient(ns, &receive_buffer[0]);
         if (bytes < 0) break;
-        printf("MSG RECEIVED <--: %s\n", receive_buffer);
+        printf("Received packet <--: %s\n", receive_buffer);
+
+        char nonce_id[40];
+        char nonce_key[1024];
+
+        memset(&nonce_id, 0, sizeof(nonce_id));
+        memset(&nonce_key, 0, sizeof(nonce_key));
+
+
+        int scannedItems = std::sscanf(receive_buffer, "%s %s", nonce_id, nonce_key);
+        if (scannedItems < 2) {
+            printf("ERROR!\n");
+        }
+
+        nonce = rsaSystem.decrypt(mp::cpp_int(nonce_key), dS, nS);
+        printf("After decryption, received nonce = %s\n", nonce.str().c_str());
+
+
+        sprintf(send_buffer, "ACK 220 nonce ok\r\n");
+        bytes = send(ns, send_buffer, (int) strlen(send_buffer), 0);
+        printf("Sending packet: --> %s\n", send_buffer);
+        if (bytes < 0) break;
+
+
+
+
+
 
 
         printf("\n--------------------------------------------\n");

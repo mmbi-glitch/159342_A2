@@ -36,7 +36,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <iostream>
-#include <boost/multiprecision/cpp_int.hpp>
+#include "../RsaSystem.h"
 
 #define WSVERS MAKEWORD(2,2) /* Use the MAKEWORD(lowbyte, highbyte) macro declared in Windef.h */
 //The high-order byte specifies the minor version number;
@@ -52,9 +52,6 @@ enum CommandName {
     USER, PASS, SHUTDOWN
 };
 
-namespace mp = boost::multiprecision;
-
-
 //using namespace std;
 /////////////////////////////////////////////////////////////////////
 
@@ -63,6 +60,8 @@ int recvFromServer(SOCKET ss, char *recv_buffer) {
     int n = 0;
     while (true) {
         bytes = recv(ss, &recv_buffer[n], 1, 0);
+
+//        std::cout << recv_buffer[n] << std::endl;
 
         if ((bytes < 0) || (bytes == 0)) break;
 
@@ -106,7 +105,7 @@ int main(int argc, char *argv[]) {
 #endif
 
 #define BUFFER_SIZE 200
-//remember that the BUFFESIZE has to be at least big enough to receive the answer from the server
+//remember that the BUFFER SIZE has to be at least big enough to receive the answer from the server
 #define SEGMENT_SIZE 70
 //segment size, i.e., if fgets gets more than this number of bytes it segments the message
 
@@ -116,10 +115,10 @@ int main(int argc, char *argv[]) {
     char serverHost[NI_MAXHOST];
     char serverService[NI_MAXSERV];
 
-    mp::cpp_int e_CA = 0;
-    mp::cpp_int n_CA = 0;
-    mp::cpp_int e_Server = 0;
-    mp::cpp_int n_Server = 0;
+    mp::cpp_int eCA = 0;
+    mp::cpp_int nCA = 0;
+    mp::cpp_int eS = 0;
+    mp::cpp_int nS = 0;
     mp::cpp_int nonce = 0;
 
 
@@ -380,23 +379,30 @@ int main(int argc, char *argv[]) {
 //*******************************************************************
 
     char key_type[40];
-    mp::cpp_int eServer = 0;
-    mp::cpp_int nServer = 0;
+    char str_e[1024];
+    char str_n[1024];
     memset(&key_type, 0, sizeof(key_type));
-
+    memset(&str_e, 0, sizeof(str_e));
+    memset(&str_n, 0, sizeof(str_n));
 
     printf("\n--------------------------------------------\n");
     printf("the <<<CLIENT>>> is preparing to authenticate.\n");
 
+    RsaSystem rsaSystem = RsaSystem();
 
     // 1a. Receive eCA - public key of certificate authority - from server
 
+    // TODO: Make certificate authority keys fixed, no need to receive
+
     recvFromServer(s, &receive_buffer[0]);
-    int scannedItems = std::sscanf(receive_buffer, "%s %d %d", key_type, &e_CA, &n_CA);
+    int scannedItems = std::sscanf(receive_buffer, "%s %s %s", key_type, str_e, str_n);
     if (scannedItems < 3) {
         printf("ERROR!\n");
     }
-    std::cout << std::endl << "Received " << key_type << " --> " << e_CA << " " << n_CA << std::endl;
+    eCA = mp::cpp_int(str_e);
+    nCA = mp::cpp_int(str_n);
+
+    std::cout << std::endl << "Received " << key_type << " --> " << eCA << " " << nCA << std::endl;
 
     sprintf(send_buffer, "ACK 226 Public certificate authority key received\r\n");
     send(s, send_buffer, (int) strlen(send_buffer), 0);
@@ -405,11 +411,13 @@ int main(int argc, char *argv[]) {
     // 2a. Receive dCA(e, n) - encrypted public key (certificate) of server - from server
 
     recvFromServer(s, &receive_buffer[0]);
-    scannedItems = std::sscanf(receive_buffer, "%s %d %d", key_type, &eServer, &nServer);
+    scannedItems = std::sscanf(receive_buffer, "%s %s %s", key_type, str_e, str_n);
     if (scannedItems < 3) {
         printf("ERROR!\n");
     }
-    std::cout << std::endl << "Received " << key_type << " --> " << eServer << " " << nServer << std::endl;
+    eS = mp::cpp_int(str_e);
+    nS = mp::cpp_int(str_n);
+    std::cout << std::endl << "Received " << key_type << " --> " << eS << " " << nS << std::endl;
 
     sprintf(send_buffer, "ACK 226 Public server key received\r\n");
     send(s, send_buffer, (int) strlen(send_buffer), 0);
@@ -417,16 +425,32 @@ int main(int argc, char *argv[]) {
 
     // 2b. Decrypt to get actual server keys
 
-//    e_Server = decrypt(eServer, eCA, nCA)
-//    n_Server = decrypt(nServer, eCA, nCA)
+    eS = rsaSystem.decrypt(eS, eCA, nCA);
+    nS = rsaSystem.decrypt(nS, eCA, nCA);
 
+    std::cout << std::endl << "---> Decrypted server public key: [" << std::endl << eS << ", " << std::endl << nS << "]" << std::endl;
 
-    // 2. Send nonce to server
-    sprintf(send_buffer, "NONCE %d\r\n", &nonce);
+    // 3. Send nonce to server
+    nonce = rsaSystem.get_rand_num();
+    std::cout << "actual nonce = " << nonce << std::endl;
+    mp::cpp_int eNonce = rsaSystem.encrypt(nonce, eS, nS);
+    sprintf(send_buffer, "NONCE %s\r\n", eNonce.str().c_str());
     send(s, send_buffer, (int) strlen(send_buffer), 0);
 
-//    nonce = encrypt(nonce, e_Server, n_Server)
-    std::cout << std::endl << "---> Sending nonce to server: NONCE " << nonce << std::endl;
+    std::cout << std::endl << "---> Sending encrypted nonce to server: NONCE " << eNonce << std::endl;
+
+    std::cout << std::endl;
+
+    recvFromServer(s, &receive_buffer[0]);
+    printf("\nReceived packet <---: %s\n", receive_buffer);
+    scannedItems = std::sscanf(receive_buffer, "%s %*s", key_type);
+    if (scannedItems < 1) {
+        printf("ERROR!\n");
+    }
+//    printf("nonce ACKed by server\n");
+    std::cout << std::endl << "nonce ACKed by server" << std::endl;
+
+
 
 
 //*******************************************************************
