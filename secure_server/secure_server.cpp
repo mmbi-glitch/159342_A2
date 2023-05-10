@@ -48,6 +48,23 @@ WSADATA wsadata; //Create a WSADATA object called wsadata.
 using namespace std;
 /////////////////////////////////////////////////////////////////////
 
+int recvFromClient(SOCKET cs, char *recv_buffer) {
+    int bytes;
+    int n = 0;
+    while (true) {
+        bytes = recv(cs, &recv_buffer[n], 1, 0);
+
+        if ((bytes < 0) || (bytes == 0)) break;
+
+        if (recv_buffer[n] == '\n') { /*end on a LF, Note: LF is equal to one character*/
+            recv_buffer[n] = '\0';
+            break;
+        }
+        if (recv_buffer[n] != '\r') n++; /*ignore CRs*/
+    }
+    return bytes;
+}
+
 void printBuffer(const char *header, char *buffer) {
     cout << "------" << header << "------" << endl;
     for (unsigned int i = 0; i < strlen(buffer); i++) {
@@ -357,6 +374,43 @@ int main(int argc, char *argv[]) {
 //********************************************************************		
 //Communicate with the Client
 //********************************************************************
+
+//*******************************************************************
+// Key Exchange Session
+//*******************************************************************
+
+        printf("\n--------------------------------------------\n");
+        printf("the <<<SERVER>>> is preparing to authenticate.\n");
+
+        int eCA = 10000;
+        int nCA = 76902;
+        int dCA = 120202;
+        int eServer = 1341;
+        int nServer = 1342;
+
+        // 1. Send public certificate authority key.
+
+        sprintf(send_buffer, "PUBLIC_CA_KEY %d %d\r\n", eCA, nCA);
+        bytes = send(ns, send_buffer, (int) strlen(send_buffer), 0);
+        printf("Sending packet: --> %s\n", send_buffer);
+        if (bytes < 0) break;
+
+        bytes = recvFromClient(ns, &receive_buffer[0]);
+        if (bytes < 0) break;
+        printf("MSG RECEIVED <--: %s\n", receive_buffer);
+
+        // 2. Send public server key.
+
+        sprintf(send_buffer, "PUBLIC_SERVER_KEY %d %d\r\n", eServer, nServer);
+        bytes = send(ns, send_buffer, (int) strlen(send_buffer), 0);
+        printf("Sending packet: --> %s\n", send_buffer);
+        if (bytes < 0) break;
+
+        bytes = recvFromClient(ns, &receive_buffer[0]);
+        if (bytes < 0) break;
+        printf("MSG RECEIVED <--: %s\n", receive_buffer);
+
+
         printf("\n--------------------------------------------\n");
         printf("the <<<SERVER>>> is waiting to receive messages.\n");
 

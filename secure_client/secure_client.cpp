@@ -34,9 +34,9 @@
 #include <winsock2.h>
 #include <ws2tcpip.h> //required by getaddrinfo() and special constants
 #include <cstdlib>
-//#include <stdio.h>
 #include <cstdio>
 #include <iostream>
+#include <boost/multiprecision/cpp_int.hpp>
 
 #define WSVERS MAKEWORD(2,2) /* Use the MAKEWORD(lowbyte, highbyte) macro declared in Windef.h */
 //The high-order byte specifies the minor version number;
@@ -52,23 +52,43 @@ enum CommandName {
     USER, PASS, SHUTDOWN
 };
 
-using namespace std;
+namespace mp = boost::multiprecision;
+
+
+//using namespace std;
 /////////////////////////////////////////////////////////////////////
 
-void printBuffer(const char *header, char *buffer) {
+int recvFromServer(SOCKET ss, char *recv_buffer) {
+    int bytes;
+    int n = 0;
+    while (true) {
+        bytes = recv(ss, &recv_buffer[n], 1, 0);
 
-    cout << "------" << header << "------" << endl;
-    for (unsigned int i = 0; i < strlen(buffer); i++) {
-        if (buffer[i] == '\r') {
-            cout << "buffer[" << i << "]=\\r" << endl;
-        } else if (buffer[i] == '\n') {
-            cout << "buffer[" << i << "]=\\n" << endl;
-        } else {
-            cout << "buffer[" << i << "]=" << buffer[i] << endl;
+        if ((bytes < 0) || (bytes == 0)) break;
+
+        if (recv_buffer[n] == '\n') { /*end on a LF, Note: LF is equal to one character*/
+            recv_buffer[n] = '\0';
+            break;
         }
+        if (recv_buffer[n] != '\r') n++; /*ignore CRs*/
     }
-    cout << "---" << endl;
+    return bytes;
 }
+
+//void printBuffer(const char *header, char *buffer) {
+//
+//    cout << "------" << header << "------" << endl;
+//    for (unsigned int i = 0; i < strlen(buffer); i++) {
+//        if (buffer[i] == '\r') {
+//            cout << "buffer[" << i << "]=\\r" << endl;
+//        } else if (buffer[i] == '\n') {
+//            cout << "buffer[" << i << "]=\\n" << endl;
+//        } else {
+//            cout << "buffer[" << i << "]=" << buffer[i] << endl;
+//        }
+//    }
+//    cout << "---" << endl;
+//}
 
 /////////////////////////////////////////////////////////////////////
 int main(int argc, char *argv[]) {
@@ -95,6 +115,13 @@ int main(int argc, char *argv[]) {
 
     char serverHost[NI_MAXHOST];
     char serverService[NI_MAXSERV];
+
+    mp::cpp_int e_CA = 0;
+    mp::cpp_int n_CA = 0;
+    mp::cpp_int e_Server = 0;
+    mp::cpp_int n_Server = 0;
+    mp::cpp_int nonce = 0;
+
 
     //memset(&sin, 0, sizeof(sin));
 
@@ -349,10 +376,67 @@ int main(int argc, char *argv[]) {
     }
 
 //*******************************************************************
-//Get input while user don't type "."
+// Key Exchange Session
 //*******************************************************************
 
-//todo create an encrypted public key dCA(e,n)
+    char key_type[40];
+    mp::cpp_int eServer = 0;
+    mp::cpp_int nServer = 0;
+    memset(&key_type, 0, sizeof(key_type));
+
+
+    printf("\n--------------------------------------------\n");
+    printf("the <<<CLIENT>>> is preparing to authenticate.\n");
+
+
+    // 1a. Receive eCA - public key of certificate authority - from server
+
+    recvFromServer(s, &receive_buffer[0]);
+    int scannedItems = std::sscanf(receive_buffer, "%s %d %d", key_type, &e_CA, &n_CA);
+    if (scannedItems < 3) {
+        printf("ERROR!\n");
+    }
+    std::cout << std::endl << "Received " << key_type << " --> " << e_CA << " " << n_CA << std::endl;
+
+    sprintf(send_buffer, "ACK 226 Public certificate authority key received\r\n");
+    send(s, send_buffer, (int) strlen(send_buffer), 0);
+    std::cout << std::endl << "---> Sending reply to server: ACK 226 Public certificate authority key received" << std::endl;
+
+    // 2a. Receive dCA(e, n) - encrypted public key (certificate) of server - from server
+
+    recvFromServer(s, &receive_buffer[0]);
+    scannedItems = std::sscanf(receive_buffer, "%s %d %d", key_type, &eServer, &nServer);
+    if (scannedItems < 3) {
+        printf("ERROR!\n");
+    }
+    std::cout << std::endl << "Received " << key_type << " --> " << eServer << " " << nServer << std::endl;
+
+    sprintf(send_buffer, "ACK 226 Public server key received\r\n");
+    send(s, send_buffer, (int) strlen(send_buffer), 0);
+    std::cout << std::endl << "---> Sending reply to server: ACK 226 Public server key received" << std::endl;
+
+    // 2b. Decrypt to get actual server keys
+
+//    e_Server = decrypt(eServer, eCA, nCA)
+//    n_Server = decrypt(nServer, eCA, nCA)
+
+
+    // 2. Send nonce to server
+    sprintf(send_buffer, "NONCE %d\r\n", &nonce);
+    send(s, send_buffer, (int) strlen(send_buffer), 0);
+
+//    nonce = encrypt(nonce, e_Server, n_Server)
+    std::cout << std::endl << "---> Sending nonce to server: NONCE " << nonce << std::endl;
+
+
+
+
+//    printf("MSG RECEIVED --> %s\n", receive_buffer);
+    // printf("<<<SERVER's Reply>>>:%s\n",receive_buffer);
+
+// TODO:
+
+// todo create an encrypted public key dCA(e,n)
 // client sends "random number" to the server- sent by e(nonce)
 // the server will decrypt
 /*
@@ -362,6 +446,12 @@ int main(int argc, char *argv[]) {
  * send msg "ACK 226 public key received"
  * send e(nonce)
  */
+
+//*******************************************************************
+//Get input while user don't type "."
+//*******************************************************************
+
+
     printf("\n--------------------------------------------\n");
     printf("you may now start sending commands to the <<<SERVER>>>\n");
     printf("\nType here:");
@@ -371,11 +461,11 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    //while ((strncmp(send_buffer,".",1) != 0) && (strncmp(send_buffer,"\n",1) != 0)) {
     while ((strncmp(send_buffer, ".", 1) != 0)) {
-        send_buffer[strlen(send_buffer) - 1] = '\0';//strip '\n'
+        send_buffer[strlen(send_buffer) - 1] = '\0'; // strip '\n'
 
-        strcat(send_buffer, "\r\n");
+        strcat(send_buffer, "\r\n"); // concatenates "\r\n" with send_buffer and stores result in send_buffer
+
         //*******************************************************************
         //SEND
         //*******************************************************************
@@ -429,6 +519,7 @@ int main(int argc, char *argv[]) {
         // printBuffer("RECEIVE_BUFFER", receive_buffer);
         printf("MSG RECEIVED --> %s\n", receive_buffer);
         // printf("<<<SERVER's Reply>>>:%s\n",receive_buffer);
+
 
         //get another user input
         memset(&send_buffer, 0, BUFFER_SIZE);
