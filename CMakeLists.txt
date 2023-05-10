@@ -14,3 +14,4 @@ target_link_libraries(159342_A2_client ws2_32)
 target_link_libraries(159342_A2_server ws2_32)
 
 target_include_directories(159342_A2_server PRIVATE {Boost_INCLUDE_DIRS})
+include_directories(${Boost_INCLUDE_DIRS})
