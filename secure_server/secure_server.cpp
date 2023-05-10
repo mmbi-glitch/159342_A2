@@ -380,7 +380,7 @@ int main(int argc, char *argv[]) {
 //*******************************************************************
 
         printf("\n--------------------------------------------\n");
-        printf("the <<<SERVER>>> is preparing to authenticate.\n");
+        printf("the <<<SERVER>>> is preparing to authenticate.\n\n");
 
         int eCA = 10000;
         int nCA = 76902;
@@ -405,6 +405,10 @@ int main(int argc, char *argv[]) {
         bytes = send(ns, send_buffer, (int) strlen(send_buffer), 0);
         printf("Sending packet: --> %s\n", send_buffer);
         if (bytes < 0) break;
+
+        bytes = recvFromClient(ns, &receive_buffer[0]);
+        if (bytes < 0) break;
+        printf("MSG RECEIVED <--: %s\n", receive_buffer);
 
         bytes = recvFromClient(ns, &receive_buffer[0]);
         if (bytes < 0) break;

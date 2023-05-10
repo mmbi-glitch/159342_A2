@@ -429,24 +429,6 @@ int main(int argc, char *argv[]) {
     std::cout << std::endl << "---> Sending nonce to server: NONCE " << nonce << std::endl;
 
 
-
-
-//    printf("MSG RECEIVED --> %s\n", receive_buffer);
-    // printf("<<<SERVER's Reply>>>:%s\n",receive_buffer);
-
-// TODO:
-
-// todo create an encrypted public key dCA(e,n)
-// client sends "random number" to the server- sent by e(nonce)
-// the server will decrypt
-/*
- * eCA = RSA public key
- * nonce = part of Cipher Block Chaining
- * extract servers public key (e,n) using copy of CA public key
- * send msg "ACK 226 public key received"
- * send e(nonce)
- */
-
 //*******************************************************************
 //Get input while user don't type "."
 //*******************************************************************
