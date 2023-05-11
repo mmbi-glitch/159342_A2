@@ -2,11 +2,11 @@
 // Created by mmbil on 10/05/2023.
 //
 
-#include "RsaSystem.h"
+#include "CryptoSystem.h"
 
-RsaSystem::RsaSystem() = default;
+CryptoSystem::CryptoSystem() = default;
 
-void RsaSystem::generate_rsa_key(mp::cpp_int p, mp::cpp_int q) {
+void CryptoSystem::generate_rsa_key(mp::cpp_int p, mp::cpp_int q) {
     n = p * q;
     z = (p - 1) * (q - 1);
 
@@ -28,24 +28,30 @@ void RsaSystem::generate_rsa_key(mp::cpp_int p, mp::cpp_int q) {
     }
 
     d = extended_euclidean_algo(z, e);
-
 }
 
-mp::cpp_int RsaSystem::get_e() {return e;}
-mp::cpp_int RsaSystem::get_n() {return n;}
-mp::cpp_int RsaSystem::get_d() {return d;}
-
-mp::cpp_int RsaSystem::encrypt(mp::cpp_int m, mp::cpp_int e, mp::cpp_int n) {
-//    return mp::powm(m, e, n);
-    return repeat_square(m, e, n);
+void CryptoSystem::generate_fixed_rsa_key(mp::cpp_int p, mp::cpp_int q) {
+    n = p * q;
+    z = (p - 1) * (q - 1);
+    e = mp::cpp_int(159826223);
+    d = extended_euclidean_algo(z, e);
 }
 
-mp::cpp_int RsaSystem::decrypt(mp::cpp_int m, mp::cpp_int d, mp::cpp_int n) {
-//    return mp::powm(m, d, n);
-    return repeat_square(m, d, n);
+mp::cpp_int CryptoSystem::get_e() {return e;}
+mp::cpp_int CryptoSystem::get_n() {return n;}
+mp::cpp_int CryptoSystem::get_d() {return d;}
+
+mp::cpp_int CryptoSystem::encrypt_rsa(mp::cpp_int m, mp::cpp_int e, mp::cpp_int n) {
+    return mp::powm(m, e, n);
+//    return repeat_square(m, e, n);
 }
 
-mp::cpp_int RsaSystem::repeat_square(mp::cpp_int a, mp::cpp_int b, mp::cpp_int m) {
+mp::cpp_int CryptoSystem::decrypt(mp::cpp_int m, mp::cpp_int d, mp::cpp_int n) {
+    return mp::powm(m, d, n);
+//    return repeat_square(m, d, n);
+}
+
+mp::cpp_int CryptoSystem::repeat_square(mp::cpp_int a, mp::cpp_int b, mp::cpp_int m) {
     mp::cpp_int X = 1;
     mp::cpp_int A = a % m;
     mp::cpp_int B = b;
@@ -62,7 +68,7 @@ mp::cpp_int RsaSystem::repeat_square(mp::cpp_int a, mp::cpp_int b, mp::cpp_int m
     return X;
 }
 
-mp::cpp_int RsaSystem::euclidean_algo(mp::cpp_int x, mp::cpp_int y) {
+mp::cpp_int CryptoSystem::euclidean_algo(mp::cpp_int x, mp::cpp_int y) {
     mp::cpp_int remainder = 0;
 
     while (true) {
@@ -77,13 +83,13 @@ mp::cpp_int RsaSystem::euclidean_algo(mp::cpp_int x, mp::cpp_int y) {
     return y;
 }
 
-mp::cpp_int RsaSystem::get_rand_num() {
+mp::cpp_int CryptoSystem::get_rand_num() {
     rd::mt19937 base_gen(clock());
-    rd::independent_bits_engine<rd::mt19937, 128, mp::cpp_int> gen(base_gen);
+    rd::independent_bits_engine<rd::mt19937, 32, mp::cpp_int> gen(base_gen);
     return gen();
 }
 
-mp::cpp_int RsaSystem::extended_euclidean_algo(mp::cpp_int z, mp::cpp_int e) {
+mp::cpp_int CryptoSystem::extended_euclidean_algo(mp::cpp_int z, mp::cpp_int e) {
     std::vector<mp::cpp_int> x = std::vector<mp::cpp_int>();
     std::vector<mp::cpp_int> y = std::vector<mp::cpp_int>();
     std::vector<mp::cpp_int> w = std::vector<mp::cpp_int>();

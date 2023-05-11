@@ -8,9 +8,6 @@
 //////////////////////////////////////////////////////////////
 
 
-#define USE_IPV6 true  //if set to false, IPv4 addressing scheme will be used; you need to set this to true to
-//enable IPv6 later on.  The assignment will be marked using IPv6!
-
 #if defined __unix__ || defined __APPLE__
 #include <unistd.h>
 #include <errno.h>
@@ -32,7 +29,8 @@
 #include <cstdio>
 #include <iostream>
 #include <boost/multiprecision/cpp_int.hpp>
-#include "../RsaSystem.h"
+#include <boost/algorithm/string.hpp>
+#include "../CryptoSystem.h"
 
 #define WSVERS MAKEWORD(2,2) /* Use the MAKEWORD(lowbyte, highbyte) macro declared in Windef.h */
 //The high-order byte specifies the minor version number;
@@ -40,11 +38,15 @@
 WSADATA wsadata; //Create a WSADATA object called wsadata.
 #endif
 
+#define USE_IPV6 true  //if set to false, IPv4 addressing scheme will be used; you need to set this to true to
+//enable IPv6 later on.  The assignment will be marked using IPv6!
 
 #define DEFAULT_PORT "1234"
 
-#define BUFFER_SIZE 500
-#define RBUFFER_SIZE 256
+#define SBUFFER_SIZE 4096
+#define RBUFFER_SIZE 4096
+
+#define BLOCK_SIZE 3
 
 //using namespace std;
 /////////////////////////////////////////////////////////////////////
@@ -97,7 +99,7 @@ int main(int argc, char *argv[]) {
     char clientService[NI_MAXSERV];
 
 
-    char send_buffer[BUFFER_SIZE], receive_buffer[RBUFFER_SIZE];
+    char send_buffer[SBUFFER_SIZE], receive_buffer[RBUFFER_SIZE];
     int n, bytes, addrlen;
     char portNum[NI_MAXSERV];
     // char username[80];
@@ -320,14 +322,14 @@ int main(int argc, char *argv[]) {
 #endif
 
 //*******************************************************************
-//INFINITE LOOP
+// INFINITE LOOP
 //********************************************************************
-    while (true) {  //main loop
+    while (true) {  // start of main loop
         printf("\n<<<SERVER>>> is listening at PORT: %s\n", portNum);
         addrlen = sizeof(clientAddress); //IPv4 & IPv6-compliant
 
 //********************************************************************
-//NEW SOCKET newsocket = accept
+// NEW SOCKET newsocket = accept
 //********************************************************************
 #if defined __unix__ || defined __APPLE__ 
         ns = -1;
@@ -380,116 +382,108 @@ int main(int argc, char *argv[]) {
         printf("\nConnected to <<<Client>>> with IP address:%s, at Port:%s\n", clientHost, clientService);
 
 
-//********************************************************************		
-//Communicate with the Client
-//********************************************************************
-
 //*******************************************************************
 // Key Exchange Session
 //*******************************************************************
 
+
+        // local variables for key exchange session
+        char msg_type[40];
+        char nonce_str[1024];
+
+        // set to default values
+        memset(&msg_type, 0, sizeof(msg_type));
+        memset(&nonce_str, 0, sizeof(nonce_str));
+
         printf("\n--------------------------------------------\n");
         printf("the <<<SERVER>>> is preparing to authenticate.\n\n");
 
-        RsaSystem rsaSystem = RsaSystem();
+        CryptoSystem cryptoSystem = CryptoSystem();
 
-        rsaSystem.generate_rsa_key(
-                mp::cpp_int("30031358154668964970024739651879804233674499053648014407906912029448529582085290556750146167520693147584309965856211"),
-                mp::cpp_int("38969351324214852693135968847187948456073706339248221339388224298088876897974759000023020729463076507938961352498811")
-                );
+        // *** 1. Generate certificate authority keys - private only *** //
 
-        eCA = rsaSystem.get_e();
-        nCA = rsaSystem.get_n();
-        dCA = rsaSystem.get_d();
+        // For the CA, generate using 128-bit p and q
 
-        // TODO: Make certificate authority keys fixed, no need to send
-
-        // 1. Send public certificate authority key.
-
-        sprintf(send_buffer, "PUBLIC_CA_KEY %s %s\r\n", eCA.str().c_str(), nCA.str().c_str());
-        bytes = send(ns, send_buffer, (int) strlen(send_buffer), 0);
-        printf("Sending packet: --> %s\n", send_buffer);
-        if (bytes < 0) break;
-
-        bytes = recvFromClient(ns, &receive_buffer[0]);
-        if (bytes < 0) break;
-        printf("Received packet <--: %s\n", receive_buffer);
-
-        // 2. Send public server key.
-
-        rsaSystem.generate_rsa_key(
-
-                mp::cpp_int("26266586019007016389999254537309480797248686480142848929197905654630816944455399311493709135750769055126452334576199"),
-                mp::cpp_int("29616954500013018701532625580017818303077905824488767279157347496048809531732918685449538060210513590769258986568381")
+        cryptoSystem.generate_fixed_rsa_key(
+                mp::cpp_int("194807849380634026909804860311046155297"),
+                mp::cpp_int("280080400733839583120536697216595482831")
         );
 
+        dCA = cryptoSystem.get_d();
+        nCA = cryptoSystem.get_n();
 
-        eS = rsaSystem.get_e();
-        nS = rsaSystem.get_n();
-        dS = rsaSystem.get_d();
+        // *** 2. Send encrypted public server key over to client. *** //
 
-        std::cout << std::endl << "actual eS = " << eS << std::endl;
-        std::cout << std::endl << "actual nS = " << nS << std::endl;
-        std::cout << std::endl << "dCA = " << dCA << std::endl;
-        std::cout << std::endl << "nCA = " << nCA << std::endl;
+        // For the public server key, let's use 64-bit p and q (because nS must be <= nCA)
+        cryptoSystem.generate_rsa_key(
+                mp::cpp_int("12268164343863522739"),
+                mp::cpp_int("14575355727418166399")
+        );
 
+        eS = cryptoSystem.get_e();
+        nS = cryptoSystem.get_n();
+        dS = cryptoSystem.get_d();
 
-        mp::cpp_int eeS = rsaSystem.encrypt(eS, dCA, nCA);
-        mp::cpp_int enS = rsaSystem.encrypt(nS, dCA, nCA);
+        // encrypt_rsa using the certificate authority's private key (RSA algorithm)
+        mp::cpp_int eeS = cryptoSystem.encrypt_rsa(eS, dCA, nCA);
+        mp::cpp_int enS = cryptoSystem.encrypt_rsa(nS, dCA, nCA);
 
-        std::cout << std::endl << "encrypted eS = " << eeS << std::endl;
-        std::cout << std::endl << "encrypted nS = " << enS << std::endl;
-
+        // send the encrypted public server key over
         sprintf(send_buffer, "PUBLIC_SERVER_KEY %s %s\r\n", eeS.str().c_str(), enS.str().c_str());
         bytes = send(ns, send_buffer, (int) strlen(send_buffer), 0);
         printf("Sending packet: --> %s\n", send_buffer);
         if (bytes < 0) break;
 
+        // receive acknowledgement that public key was received from server
         bytes = recvFromClient(ns, &receive_buffer[0]);
         if (bytes < 0) break;
         printf("Received packet <--: %s\n", receive_buffer);
 
-        // 3. Get nonce from client
-
-        bytes = recvFromClient(ns, &receive_buffer[0]);
-        if (bytes < 0) break;
-        printf("Received packet <--: %s\n", receive_buffer);
-
-        char nonce_id[40];
-        char nonce_key[1024];
-
-        memset(&nonce_id, 0, sizeof(nonce_id));
-        memset(&nonce_key, 0, sizeof(nonce_key));
-
-
-        int scannedItems = std::sscanf(receive_buffer, "%s %s", nonce_id, nonce_key);
-        if (scannedItems < 2) {
-            printf("ERROR!\n");
+        int scannedItems = std::sscanf(receive_buffer, "%s %*s", msg_type);
+        if ((scannedItems < 1) || strcmp(msg_type, "ACK") != 0) {
+            printf("Error: public key not received by client\n");
+            break;
         }
 
-        nonce = rsaSystem.decrypt(mp::cpp_int(nonce_key), dS, nS);
+        printf("Public key ACKed by client\n");
+
+        // *** 3. Get nonce from client *** //
+
+        // receive the encrypted nonce
+        bytes = recvFromClient(ns, &receive_buffer[0]);
+        if (bytes < 0) break;
+        printf("Received packet <--: %s\n", receive_buffer);
+
+        scannedItems = std::sscanf(receive_buffer, "%s %s", msg_type, nonce_str);
+        if (scannedItems < 2) {
+            printf("Error: nonce not received by server\n");
+            break;
+        }
+
+        // decrypt the nonce
+        nonce = cryptoSystem.decrypt(mp::cpp_int(nonce_str), dS, nS);
         printf("After decryption, received nonce = %s\n", nonce.str().c_str());
 
-
+        // send acknowledgement that nonce is ok
         sprintf(send_buffer, "ACK 220 nonce ok\r\n");
         bytes = send(ns, send_buffer, (int) strlen(send_buffer), 0);
         printf("Sending packet: --> %s\n", send_buffer);
         if (bytes < 0) break;
 
-
-
-
-
-
+//********************************************************************
+// Communicate with the Client SECURELY
+//********************************************************************
 
         printf("\n--------------------------------------------\n");
         printf("the <<<SERVER>>> is waiting to receive messages.\n");
 
         while (true) {
             n = 0;
+
 //********************************************************************
-//RECEIVE one command (delimited by \r\n)
+// RECEIVE one command (delimited by \r\n)
 //********************************************************************
+
             while (true) {
                 bytes = recv(ns, &receive_buffer[n], 1, 0);
 
@@ -506,14 +500,50 @@ int main(int argc, char *argv[]) {
             sprintf(send_buffer, "Message:'%s' - There are %d bytes of information\r\n", receive_buffer, n);
 
 //********************************************************************
-//PROCESS REQUEST
-//********************************************************************			
+// DECRYPT message received (RSA_CBC)
+//********************************************************************
+
+            mp::cpp_int randNum = nonce;
             printf("MSG RECEIVED <--: %s\n", receive_buffer);
-            //printBuffer("RECEIVE_BUFFER", receive_buffer);
+
+            char *token;
+            printf("Decrypted message: ");
+            token = strtok(receive_buffer, " ");
+            while (token != nullptr) {
+                mp::cpp_int decrypted_cipher = cryptoSystem.decrypt(mp::cpp_int(token), dS, nS);
+                decrypted_cipher = decrypted_cipher ^ randNum;
+                randNum = mp::cpp_int(token);
+                //
+                size_t pos = 0;
+                std::string str = std::string(decrypted_cipher.str());
+                while (pos < str.length()) {
+                    if ((stoi(str.substr(pos, 4)) == 1013) && (pos + 4 == str.length())) {
+                        break;
+                    }
+                    if ((stoi(str.substr(pos, 6)) == 101313) && (pos + 6 == str.length())) {
+                        break;
+                    }
+                    if (stoi(str.substr(pos, 2)) >= 32 && (stoi(str.substr(pos, 2)) <= 99)) {
+                        std::cout << (char) stoi(str.substr(pos, 2));
+                        pos += 2;
+                    } else if (stoi(str.substr(pos, 3)) >= 100 && (stoi(str.substr(pos, 3)) <= 127)) {
+                        std::cout << (char) stoi(str.substr(pos, 3));
+                        pos += 3;
+                    } else {
+                        pos += 2;
+                    }
+                }
+
+//              printf("%s ", decrypted_cipher.str().c_str());
+                token = strtok(nullptr, " ");
+            }
+            printf("\n");
+
 
 //********************************************************************
-//SEND
-//********************************************************************         
+// SEND
+//********************************************************************
+
             bytes = send(ns, send_buffer, strlen(send_buffer), 0);
             printf("MSG SENT --> %s\n", send_buffer);
             //printBuffer("SEND_BUFFER", send_buffer);
@@ -525,8 +555,9 @@ int main(int argc, char *argv[]) {
 #endif
 
         }
+
 //********************************************************************
-//CLOSE SOCKET
+// CLOSE SOCKET
 //********************************************************************
 
 
@@ -553,13 +584,13 @@ int main(int argc, char *argv[]) {
 #endif
 //***********************************************************************
 
-
         printf("\ndisconnected from << Client >> with IP address:%s, Port:%s\n", clientHost, clientService);
         printf("=============================================");
 
-    } //main loop
+    } // end of main loop
 //***********************************************************************
-#if defined __unix__ || defined __APPLE__ 
+
+#if defined __unix__ || defined __APPLE__
     close(s);
 #elif defined _WIN32 
     closesocket(s);

@@ -2,8 +2,8 @@
 // Created by mmbil on 10/05/2023.
 //
 
-#ifndef INC_159342_A2_RSASYSTEM_H
-#define INC_159342_A2_RSASYSTEM_H
+#ifndef INC_159342_A2_CRYPTOSYSTEM_H
+#define INC_159342_A2_CRYPTOSYSTEM_H
 
 
 #include <boost/multiprecision/cpp_int.hpp>
@@ -13,19 +13,20 @@
 namespace rd = boost::random;
 namespace mp = boost::multiprecision;
 
-class RsaSystem {
+class CryptoSystem {
 private:
     mp::cpp_int z;
     mp::cpp_int e;
     mp::cpp_int n;
     mp::cpp_int d;
 public:
-    RsaSystem();
+    CryptoSystem();
     void generate_rsa_key(mp::cpp_int p, mp::cpp_int q);
+    void generate_fixed_rsa_key(mp::cpp_int p, mp::cpp_int q);
     mp::cpp_int euclidean_algo(mp::cpp_int x, mp::cpp_int y);
     mp::cpp_int extended_euclidean_algo(mp::cpp_int z, mp::cpp_int e);
     mp::cpp_int get_rand_num();
-    mp::cpp_int encrypt(mp::cpp_int m, mp::cpp_int e, mp::cpp_int n);
+    mp::cpp_int encrypt_rsa(mp::cpp_int m, mp::cpp_int e, mp::cpp_int n);
     mp::cpp_int decrypt(mp::cpp_int m, mp::cpp_int d, mp::cpp_int n);
     mp::cpp_int get_e();
     mp::cpp_int get_n();
@@ -34,4 +35,4 @@ public:
 };
 
 
-#endif //INC_159342_A2_RSASYSTEM_H
+#endif //INC_159342_A2_CRYPTOSYSTEM_H

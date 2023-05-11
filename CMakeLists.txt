@@ -9,8 +9,8 @@ find_package(Boost 1.82.0 REQUIRED)
 
 include_directories(${Boost_INCLUDE_DIRS})
 
-add_executable(159342_A2_client secure_client/secure_client.cpp RsaSystem.cpp RsaSystem.h)
-add_executable(159342_A2_server secure_server/secure_server.cpp RsaSystem.cpp RsaSystem.h)
+add_executable(159342_A2_client secure_client/secure_client.cpp CryptoSystem.cpp CryptoSystem.h)
+add_executable(159342_A2_server secure_server/secure_server.cpp CryptoSystem.cpp CryptoSystem.h)
 
 target_link_libraries(159342_A2_client ws2_32)
 target_link_libraries(159342_A2_server ws2_32)
