@@ -520,21 +520,20 @@ int main(int argc, char *argv[]) {
 
                 // convert character codes to actual characters and print them
                 size_t pos = 0;
-                std::string str = std::string(plaintext.str());
-                while (pos < str.length()) {
+                while (pos < plaintext.str().length()) {
                     // break when encounter padded characters
-                    if ((stoi(str.substr(pos, 4)) == 1013) && (pos + 4 == str.length())) {
+                    if ((stoi(plaintext.str().substr(pos, 4)) == 1013) && (pos + 4 == plaintext.str().length())) {
                         break;
                     }
-                    if ((stoi(str.substr(pos, 6)) == 101313) && (pos + 6 == str.length())) {
+                    if ((stoi(plaintext.str().substr(pos, 6)) == 101313) && (pos + 6 == plaintext.str().length())) {
                         break;
                     }
                     // detect printable characters and print them
-                    if (stoi(str.substr(pos, 2)) >= 32 && (stoi(str.substr(pos, 2)) <= 99)) {
-                        std::cout << (char) stoi(str.substr(pos, 2));
+                    if (stoi(plaintext.str().substr(pos, 2)) >= 32 && (stoi(plaintext.str().substr(pos, 2)) <= 99)) {
+                        printf("%c", (char) stoi(plaintext.str().substr(pos, 2)));
                         pos += 2;
-                    } else if (stoi(str.substr(pos, 3)) >= 100 && (stoi(str.substr(pos, 3)) <= 127)) {
-                        std::cout << (char) stoi(str.substr(pos, 3));
+                    } else if (stoi(plaintext.str().substr(pos, 3)) >= 100 && (stoi(plaintext.str().substr(pos, 3)) <= 127)) {
+                        printf("%c", (char) stoi(plaintext.str().substr(pos, 3)));
                         pos += 3;
                     } else { // skip non-printable characters
                         pos += 2;
@@ -542,7 +541,7 @@ int main(int argc, char *argv[]) {
                 }
                 token = strtok(nullptr, " ");
             }
-            printf("\n");
+            printf("\n\n");
 
 
 //********************************************************************

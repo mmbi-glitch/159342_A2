@@ -414,18 +414,18 @@ int main(int argc, char *argv[]) {
     }
     eS = mp::cpp_int(str_e);
     nS = mp::cpp_int(str_n);
-    std::cout << std::endl << "Received " << msg_type << " --> " << eS << " " << nS << std::endl;
+    printf("\nReceived %s <--- %s %s\n", msg_type, eS.str().c_str(), nS.str().c_str());
 
     // send acknowledgement of public server key over to server
     snprintf(send_buffer, SBUFFER_SIZE, "ACK 226 Public server key received\r\n");
     send(s, send_buffer, (int) strlen(send_buffer), 0);
-    std::cout << std::endl << "---> Sending reply to server: ACK 226 Public server key received" << std::endl;
+    printf("\nSending reply to server ---> ACK 226 Public server key received\n");
 
     // decrypt_rsa public server key
     eS = cryptoSystem.decrypt_rsa(eS, eCA, nCA);
     nS = cryptoSystem.decrypt_rsa(nS, eCA, nCA);
 
-    std::cout << std::endl << "---> Decrypted server public key: [" << eS << ", " << nS << "]" << std::endl;
+    printf("\nDecrypted server public key ---> [%s, %s]\n", eS.str().c_str(), nS.str().c_str());
 
     // *** 3. Send encrypted nonce to server *** //
 
@@ -435,15 +435,16 @@ int main(int argc, char *argv[]) {
     snprintf(send_buffer, SBUFFER_SIZE, "NONCE %s\r\n", eNonce.str().c_str());
     send(s, send_buffer, (int) strlen(send_buffer), 0);
 
-    std::cout << std::endl << "---> Sending encrypted nonce to server: NONCE " << eNonce << std::endl;
+    printf("\nSending encrypted nonce to server ---> NONCE %s\n", eNonce.str().c_str());
 
     recvFromServer(s, &receive_buffer[0]);
-    std::cout << std::endl << "Received packet <---: " << receive_buffer << std::endl;
+    printf("\nReceived packet <--- %s\n", receive_buffer);
+
     scannedItems = std::sscanf(receive_buffer, "%s %*s", msg_type);
     if ((scannedItems < 1) || strcmp(msg_type, "ACK") != 0) {
         printf("Error: nonce was not ACKed by server\n");
     }
-    std::cout << std::endl << "nonce ACKed by server" << std::endl;
+    printf("\nnonce ACKed by server\n");
 
 
 //*******************************************************************
