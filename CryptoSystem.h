@@ -27,11 +27,12 @@ public:
     mp::cpp_int extended_euclidean_algo(mp::cpp_int z, mp::cpp_int e);
     mp::cpp_int get_rand_num();
     mp::cpp_int encrypt_rsa(mp::cpp_int m, mp::cpp_int e, mp::cpp_int n);
-    mp::cpp_int decrypt(mp::cpp_int m, mp::cpp_int d, mp::cpp_int n);
+    mp::cpp_int decrypt_rsa(mp::cpp_int m, mp::cpp_int d, mp::cpp_int n);
+    mp::cpp_int encrypt_rsa_cbc(mp::cpp_int m, mp::cpp_int e, mp::cpp_int n, mp::cpp_int rand);
+    mp::cpp_int decrypt_rsa_cbc(mp::cpp_int m, mp::cpp_int d, mp::cpp_int n, mp::cpp_int rand);
     mp::cpp_int get_e();
     mp::cpp_int get_n();
     mp::cpp_int get_d();
-    mp::cpp_int repeat_square(mp::cpp_int a, mp::cpp_int b, mp::cpp_int m);
 };
 
 
