@@ -460,8 +460,8 @@ int main(int argc, char *argv[]) {
             break;
         }
 
-        // decrypt the nonce
-        nonce = cryptoSystem.decrypt(mp::cpp_int(nonce_str), dS, nS);
+        // decrypt_rsa the nonce
+        nonce = cryptoSystem.decrypt_rsa(mp::cpp_int(nonce_str), dS, nS);
         printf("After decryption, received nonce = %s\n", nonce.str().c_str());
 
         // send acknowledgement that nonce is ok
@@ -503,41 +503,45 @@ int main(int argc, char *argv[]) {
 // DECRYPT message received (RSA_CBC)
 //********************************************************************
 
-            mp::cpp_int randNum = nonce;
+
             printf("MSG RECEIVED <--: %s\n", receive_buffer);
 
+            mp::cpp_int randNum = nonce;
+            mp::cpp_int plaintext = 0;
             char *token;
-            printf("Decrypted message: ");
             token = strtok(receive_buffer, " ");
+            printf("Decrypted message: ");
+
+            // split received message into tokens with space delimiter
             while (token != nullptr) {
-                mp::cpp_int decrypted_cipher = cryptoSystem.decrypt(mp::cpp_int(token), dS, nS);
-                decrypted_cipher = decrypted_cipher ^ randNum;
+                // rsa cbc decryption
+                plaintext = cryptoSystem.decrypt_rsa_cbc(mp::cpp_int(token), dS, nS, randNum);
                 randNum = mp::cpp_int(token);
-                //
+
+                // convert character codes to actual characters and print them
                 size_t pos = 0;
-                std::string str = std::string(decrypted_cipher.str());
-                while (pos < str.length()) {
-                    if ((stoi(str.substr(pos, 4)) == 1013) && (pos + 4 == str.length())) {
+                while (pos < plaintext.str().length()) {
+                    // break when encounter padded characters
+                    if ((stoi(plaintext.str().substr(pos, 4)) == 1013) && (pos + 4 == plaintext.str().length())) {
                         break;
                     }
-                    if ((stoi(str.substr(pos, 6)) == 101313) && (pos + 6 == str.length())) {
+                    if ((stoi(plaintext.str().substr(pos, 6)) == 101313) && (pos + 6 == plaintext.str().length())) {
                         break;
                     }
-                    if (stoi(str.substr(pos, 2)) >= 32 && (stoi(str.substr(pos, 2)) <= 99)) {
-                        std::cout << (char) stoi(str.substr(pos, 2));
+                    // detect printable characters and print them
+                    if (stoi(plaintext.str().substr(pos, 2)) >= 32 && (stoi(plaintext.str().substr(pos, 2)) <= 99)) {
+                        printf("%c", (char) stoi(plaintext.str().substr(pos, 2)));
                         pos += 2;
-                    } else if (stoi(str.substr(pos, 3)) >= 100 && (stoi(str.substr(pos, 3)) <= 127)) {
-                        std::cout << (char) stoi(str.substr(pos, 3));
+                    } else if (stoi(plaintext.str().substr(pos, 3)) >= 100 && (stoi(plaintext.str().substr(pos, 3)) <= 127)) {
+                        printf("%c", (char) stoi(plaintext.str().substr(pos, 3)));
                         pos += 3;
-                    } else {
+                    } else { // skip non-printable characters
                         pos += 2;
                     }
                 }
-
-//              printf("%s ", decrypted_cipher.str().c_str());
                 token = strtok(nullptr, " ");
             }
-            printf("\n");
+            printf("\n\n");
 
 
 //********************************************************************

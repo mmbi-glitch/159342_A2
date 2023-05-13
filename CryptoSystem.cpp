@@ -43,29 +43,18 @@ mp::cpp_int CryptoSystem::get_d() {return d;}
 
 mp::cpp_int CryptoSystem::encrypt_rsa(mp::cpp_int m, mp::cpp_int e, mp::cpp_int n) {
     return mp::powm(m, e, n);
-//    return repeat_square(m, e, n);
 }
 
-mp::cpp_int CryptoSystem::decrypt(mp::cpp_int m, mp::cpp_int d, mp::cpp_int n) {
+mp::cpp_int CryptoSystem::decrypt_rsa(mp::cpp_int m, mp::cpp_int d, mp::cpp_int n) {
     return mp::powm(m, d, n);
-//    return repeat_square(m, d, n);
 }
 
-mp::cpp_int CryptoSystem::repeat_square(mp::cpp_int a, mp::cpp_int b, mp::cpp_int m) {
-    mp::cpp_int X = 1;
-    mp::cpp_int A = a % m;
-    mp::cpp_int B = b;
-    while (B >= 1) {
-        if (B % 2 != 0) {
-            B = (mp::cpp_int) B - 1;
-            X = (mp::cpp_int) (A * X) % m;
-        }
-        else {
-            B = (mp::cpp_int) B / 2;
-            A = (mp::cpp_int) mp::powm(A, 2, m);
-        }
-    }
-    return X;
+mp::cpp_int CryptoSystem::encrypt_rsa_cbc(mp::cpp_int m, mp::cpp_int e, mp::cpp_int n, mp::cpp_int rand) {
+    return encrypt_rsa((m ^ rand), e, n);
+}
+
+mp::cpp_int CryptoSystem::decrypt_rsa_cbc(mp::cpp_int m, mp::cpp_int d, mp::cpp_int n, mp::cpp_int rand) {
+    return decrypt_rsa(m, d, n) ^ rand;
 }
 
 mp::cpp_int CryptoSystem::euclidean_algo(mp::cpp_int x, mp::cpp_int y) {
