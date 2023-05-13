@@ -12,11 +12,6 @@
 //
 //////////////////////////////////////////////////////////////////////////////////////////////
 
-#define USE_IPV6 true
-#define DEFAULT_IPV4_ADDR "127.0.0.1"
-#define DEFAULT_IPV6_ADDR "::1"
-#define DEFAULT_PORT "1234"
-
 #if defined __unix__ || defined __APPLE__
 #include <unistd.h>
 #include <errno.h>
@@ -33,10 +28,10 @@
 
 #include <winsock2.h>
 #include <ws2tcpip.h> //required by getaddrinfo() and special constants
-#include <cstdlib>
-//#include <stdio.h>
-#include <cstdio>
+#include <stdlib.h>
+#include <stdio.h>
 #include <iostream>
+#include "../CryptoSystem.h"
 
 #define WSVERS MAKEWORD(2,2) /* Use the MAKEWORD(lowbyte, highbyte) macro declared in Windef.h */
 //The high-order byte specifies the minor version number;
@@ -45,6 +40,17 @@
 WSADATA wsadata; //Create a WSADATA object called wsadata.
 #endif
 
+#define USE_IPV6 true
+#define DEFAULT_IPV4_ADDR "127.0.0.1"
+#define DEFAULT_IPV6_ADDR "::1"
+#define DEFAULT_PORT "1234"
+#define BLOCK_SIZE 3
+#define SBUFFER_SIZE 4096
+#define RBUFFER_SIZE 4096
+//remember that the BUFFER SIZE has to be at least big enough to receive the answer from the server
+#define SEGMENT_SIZE 256
+//segment size, i.e., if fgets gets more than this number of bytes it segments the message
+
 //////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -52,23 +58,42 @@ enum CommandName {
     USER, PASS, SHUTDOWN
 };
 
-using namespace std;
+//using namespace std;
 /////////////////////////////////////////////////////////////////////
 
-void printBuffer(const char *header, char *buffer) {
+int recvFromServer(SOCKET ss, char *recv_buffer) {
+    int bytes;
+    int n = 0;
+    while (true) {
+        bytes = recv(ss, &recv_buffer[n], 1, 0);
 
-    cout << "------" << header << "------" << endl;
-    for (unsigned int i = 0; i < strlen(buffer); i++) {
-        if (buffer[i] == '\r') {
-            cout << "buffer[" << i << "]=\\r" << endl;
-        } else if (buffer[i] == '\n') {
-            cout << "buffer[" << i << "]=\\n" << endl;
-        } else {
-            cout << "buffer[" << i << "]=" << buffer[i] << endl;
+//        std::cout << recv_buffer[n] << std::endl;
+
+        if ((bytes < 0) || (bytes == 0)) break;
+
+        if (recv_buffer[n] == '\n') { /*end on a LF, Note: LF is equal to one character*/
+            recv_buffer[n] = '\0';
+            break;
         }
+        if (recv_buffer[n] != '\r') n++; /*ignore CRs*/
     }
-    cout << "---" << endl;
+    return bytes;
 }
+
+//void printBuffer(const char *header, char *buffer) {
+//
+//    cout << "------" << header << "------" << endl;
+//    for (unsigned int i = 0; i < strlen(buffer); i++) {
+//        if (buffer[i] == '\r') {
+//            cout << "buffer[" << i << "]=\\r" << endl;
+//        } else if (buffer[i] == '\n') {
+//            cout << "buffer[" << i << "]=\\n" << endl;
+//        } else {
+//            cout << "buffer[" << i << "]=" << buffer[i] << endl;
+//        }
+//    }
+//    cout << "---" << endl;
+//}
 
 /////////////////////////////////////////////////////////////////////
 int main(int argc, char *argv[]) {
@@ -85,16 +110,19 @@ int main(int argc, char *argv[]) {
     SOCKET s;
 #endif
 
-#define BUFFER_SIZE 200
-//remember that the BUFFESIZE has to be at least big enough to receive the answer from the server
-#define SEGMENT_SIZE 70
-//segment size, i.e., if fgets gets more than this number of bytes it segments the message
 
-    char send_buffer[BUFFER_SIZE], receive_buffer[BUFFER_SIZE];
+    char send_buffer[SBUFFER_SIZE], receive_buffer[RBUFFER_SIZE];
     int n, bytes;
 
     char serverHost[NI_MAXHOST];
     char serverService[NI_MAXSERV];
+
+    mp::cpp_int eCA = 0;
+    mp::cpp_int nCA = 0;
+    mp::cpp_int eS = 0;
+    mp::cpp_int nS = 0;
+    mp::cpp_int nonce = 0;
+
 
     //memset(&sin, 0, sizeof(sin));
 
@@ -128,10 +156,10 @@ int main(int argc, char *argv[]) {
 
     if (USE_IPV6) {
 
-        printf("\n=== IPv6 ===");
+        printf("\n=== IPv6 ===\n");
     } else { //IPV4
 
-        printf("\n=== IPv4 ===");
+        printf("\n=== IPv4 ===\n");
     }
 
 //********************************************************************
@@ -172,10 +200,10 @@ int main(int argc, char *argv[]) {
 
     if (USE_IPV6) {
         hints.ai_family = AF_INET6;
-        printf("\n=== IPv6 ===");
+        printf("\n=== IPv6 ===\n");
     } else { //IPV4
         hints.ai_family = AF_INET;
-        printf("\n=== IPv4 ===");
+        printf("\n=== IPv4 ===\n");
     }
 
     hints.ai_socktype = SOCK_STREAM;
@@ -191,14 +219,14 @@ int main(int argc, char *argv[]) {
     //if there are 3 parameters passed to the argv[] array.
     if (argc == 3) {
         //sin.sin_port = htons((u_short)atoi(argv[2])); //get Remote Port number
-        sprintf(portNum, "%s", argv[2]);
+        snprintf(portNum, NI_MAXHOST, "%s", argv[2]);
         printf("\nUsing port: %s \n", portNum);
         iResult = getaddrinfo(argv[1], portNum, &hints, &result);
         //iResult = getaddrinfo("0:0:0:0:0:0:0:1", portNum, &hints, &result); //works! test only!
     } else {
         //sin.sin_port = htons(1234); //use default port number
         printf("USAGE: Client IP-address [port]\n"); //missing IP address
-        sprintf(portNum, "%s", DEFAULT_PORT);
+        snprintf(portNum, NI_MAXSERV, "%s", DEFAULT_PORT);
         printf("Default portNum = %s\n", portNum);
         if (USE_IPV6) {
             printf("Using default settings, IP:%s, Port:%s\n", DEFAULT_IPV6_ADDR, DEFAULT_PORT);
@@ -349,40 +377,174 @@ int main(int argc, char *argv[]) {
     }
 
 //*******************************************************************
-//Get input while user don't type "."
+// Key Exchange Session
 //*******************************************************************
 
-//todo create an encrypted public key dCA(e,n)
-// client sends "random number" to the server- sent by e(nonce)
-// the server will decrypt
-/*
- * eCA = RSA public key
- * nonce = part of Cipher Block Chaining
- * extract servers public key (e,n) using copy of CA public key
- * send msg "ACK 226 public key received"
- * send e(nonce)
- */
+    // local variables for key exchange session
+    char msg_type[40];
+    char str_e[1024];
+    char str_n[1024];
+
+    // set to default values
+    memset(&msg_type, 0, sizeof(msg_type));
+    memset(&str_e, 0, sizeof(str_e));
+    memset(&str_n, 0, sizeof(str_n));
+
+    printf("\n--------------------------------------------\n");
+    printf("the <<<CLIENT>>> is preparing to authenticate.\n");
+
+    CryptoSystem cryptoSystem = CryptoSystem();
+
+    // *** 1. Generate certificate authority keys - public only *** //
+
+    cryptoSystem.generate_fixed_rsa_key(
+            mp::cpp_int("194807849380634026909804860311046155297"),
+            mp::cpp_int("280080400733839583120536697216595482831")
+    );
+
+    eCA = cryptoSystem.get_e();
+    nCA = cryptoSystem.get_n();
+
+    // *** 2. Get encrypted public server key from server *** //
+
+    recvFromServer(s, &receive_buffer[0]);
+    int scannedItems = std::sscanf(receive_buffer, "%s %s %s", msg_type, str_e, str_n);
+    if (scannedItems < 3) {
+        printf("Error: public key was not received from server\n");
+    }
+    eS = mp::cpp_int(str_e);
+    nS = mp::cpp_int(str_n);
+    std::cout << std::endl << "Received " << msg_type << " --> " << eS << " " << nS << std::endl;
+
+    // send acknowledgement of public server key over to server
+    snprintf(send_buffer, SBUFFER_SIZE, "ACK 226 Public server key received\r\n");
+    send(s, send_buffer, (int) strlen(send_buffer), 0);
+    std::cout << std::endl << "---> Sending reply to server: ACK 226 Public server key received" << std::endl;
+
+    // decrypt public server key
+    eS = cryptoSystem.decrypt(eS, eCA, nCA);
+    nS = cryptoSystem.decrypt(nS, eCA, nCA);
+
+    std::cout << std::endl << "---> Decrypted server public key: [" << eS << ", " << nS << "]" << std::endl;
+
+    // *** 3. Send encrypted nonce to server *** //
+
+    nonce = cryptoSystem.get_rand_num();
+    mp::cpp_int eNonce = cryptoSystem.encrypt_rsa(nonce, eS, nS);
+
+    snprintf(send_buffer, SBUFFER_SIZE, "NONCE %s\r\n", eNonce.str().c_str());
+    send(s, send_buffer, (int) strlen(send_buffer), 0);
+
+    std::cout << std::endl << "---> Sending encrypted nonce to server: NONCE " << eNonce << std::endl;
+
+    recvFromServer(s, &receive_buffer[0]);
+    std::cout << std::endl << "Received packet <---: " << receive_buffer << std::endl;
+    scannedItems = std::sscanf(receive_buffer, "%s %*s", msg_type);
+    if ((scannedItems < 1) || strcmp(msg_type, "ACK") != 0) {
+        printf("Error: nonce was not ACKed by server\n");
+    }
+    std::cout << std::endl << "nonce ACKed by server" << std::endl;
+
+
+//*******************************************************************
+// Get input while user don't type "."
+//*******************************************************************
+
+
     printf("\n--------------------------------------------\n");
     printf("you may now start sending commands to the <<<SERVER>>>\n");
     printf("\nType here:");
-    memset(&send_buffer, 0, BUFFER_SIZE);
+    memset(&send_buffer, 0, SBUFFER_SIZE);
     if (fgets(send_buffer, SEGMENT_SIZE, stdin) == nullptr) {
         printf("error using fgets()\n");
         exit(1);
     }
 
-    //while ((strncmp(send_buffer,".",1) != 0) && (strncmp(send_buffer,"\n",1) != 0)) {
-    while ((strncmp(send_buffer, ".", 1) != 0)) {
-        send_buffer[strlen(send_buffer) - 1] = '\0';//strip '\n'
+    while ((strncmp(send_buffer, ".", 1) != 0)) { // <--- Start of send/receive loop
 
-        strcat(send_buffer, "\r\n");
+
         //*******************************************************************
-        //SEND
+        // ENCRYPT message before sending (RSA_CBC)
         //*******************************************************************
 
-        bytes = send(s, send_buffer, strlen(send_buffer), 0);
-        printf("\nMSG SENT <--: %s\n", send_buffer);//line sent
-        printf("Message length: %d \n", (int) strlen(send_buffer));
+        // *** 1. Calculate how many blocks can be made and how many bytes remaining *** //
+
+        int total_blocks = (int) strlen(send_buffer) / BLOCK_SIZE;
+
+        int remaining = (int) strlen(send_buffer) % BLOCK_SIZE;
+
+//        printf("DEBUG: Total length of string: %d\n", (int) strlen(send_buffer));
+//        printf("DEBUG (Before padding): Total blocks: %d\n", total_blocks);
+//        printf("DEBUG: Remaining: %d\n", remaining);
+
+        // *** 2. Pad remaining bits with carriage return character *** //
+        if ((remaining > 0) && (strlen(send_buffer) + (BLOCK_SIZE - remaining) < SBUFFER_SIZE)) {
+            for (int i = 0; i < (BLOCK_SIZE - remaining); i++) {
+                strcat(send_buffer, "\r");
+            }
+            total_blocks++;
+        }
+
+
+//        printf("DEBUG (After padding): Total blocks: %d\n", total_blocks);
+
+        // *** 3. Split string into blocks of the right size *** //
+
+        char blocks[total_blocks][BLOCK_SIZE + 1];
+
+        for (int i = 0; i < total_blocks; i++) {
+            memset(&blocks[i], 0, sizeof(blocks[i]));
+        }
+
+        int k = 0;
+        for (int i = 0; i < total_blocks; i++) {
+            memcpy(blocks[i], send_buffer + k, BLOCK_SIZE);
+            k += BLOCK_SIZE;
+        }
+
+        for (int i = 0; i < total_blocks; i++) {
+            printf("DEBUG: blocks[%d] = %s\n", i, blocks[i]);
+        }
+
+        // *** 4. RSA CBC encryption
+
+        char numToChar[64];
+
+        memset(&numToChar, 0, 64);
+
+        mp::cpp_int randNum = nonce;
+
+        mp::cpp_int ciphertext[total_blocks];
+
+        for (int i = 0; i < total_blocks; i++) {
+            sprintf(numToChar, "%d%d%d", (int) blocks[i][0], (int) blocks[i][1], (int) blocks[i][2]);
+            ciphertext[i] = mp::cpp_int(numToChar) ^ randNum;
+            ciphertext[i] = cryptoSystem.encrypt_rsa(ciphertext[i], eS, nS);
+            randNum = ciphertext[i];
+        }
+
+        // *** 4. load send buffer with ciphertext *** //
+
+        // clear the send buffer first
+        char send_buffer_2[SBUFFER_SIZE];
+        memset(send_buffer_2, 0, SBUFFER_SIZE);
+
+        for (int i = 0; i < total_blocks; i++) {
+            strcat(send_buffer_2, ciphertext[i].str().c_str());
+            strcat(send_buffer_2, " ");
+        }
+
+        send_buffer_2[strlen(send_buffer_2) - 1] = '\0'; // replace last char with null terminating char
+
+        strcat(send_buffer_2, "\r\n"); // concatenates "\r\n" with send_buffer and stores result in send_buffer
+
+        //*******************************************************************
+        // SEND
+        //*******************************************************************
+
+        bytes = send(s, send_buffer_2, strlen(send_buffer_2), 0);
+        printf("\nMSG SENT <--: %s\n", send_buffer_2);//line sent
+        printf("Message length: %d \n", (int) strlen(send_buffer_2));
 
 
 #if defined __unix__ || defined __APPLE__     
@@ -399,10 +561,12 @@ int main(int argc, char *argv[]) {
 #endif
 
         n = 0;
+
+        //*******************************************************************
+        // RECEIVE
+        //*******************************************************************
+
         while (true) {
-            //*******************************************************************
-            //RECEIVE
-            //*******************************************************************
             bytes = recv(s, &receive_buffer[n], 1, 0);
 
 #if defined __unix__ || defined __APPLE__  
@@ -426,12 +590,11 @@ int main(int argc, char *argv[]) {
             if (receive_buffer[n] != '\r') n++;   /*ignore CR's*/
         }
 
-        // printBuffer("RECEIVE_BUFFER", receive_buffer);
         printf("MSG RECEIVED --> %s\n", receive_buffer);
-        // printf("<<<SERVER's Reply>>>:%s\n",receive_buffer);
 
-        //get another user input
-        memset(&send_buffer, 0, BUFFER_SIZE);
+        // get another user input
+
+        memset(&send_buffer, 0, SBUFFER_SIZE);
         printf("\nType here:");
         if (fgets(send_buffer, SEGMENT_SIZE, stdin) == nullptr) {
             printf("error using fgets()\n");
@@ -439,7 +602,8 @@ int main(int argc, char *argv[]) {
         }
 
 
-    }
+    } // <--- End of send/receive loop
+
     printf("\n--------------------------------------------\n");
     printf("<<<CLIENT>>> is shutting down...\n");
 
