@@ -1,4 +1,4 @@
-# 159342_A2
+# Assignment 2 - 159342 (Secure Server)
 
 A secure TCP client-server application that implements a hybrid cryptographic algorithm known as RSA with Cipher Block Chaining. Any messages sent from the client to the server are encrypted first, while they are decrypted at the server-side. 
 
